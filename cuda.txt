@@ -1,0 +1,147 @@
+multi
+
+%%writefile mat2.cu
+#include <cuda_runtime.h>
+#include <iostream>
+__global__ void matmul(int* A, int* B, int* C, int N)
+ {
+int Row = blockIdx.y*blockDim.y+threadIdx.y;
+int Col = blockIdx.x*blockDim.x+threadIdx.x;
+if (Row < N && Col < N)
+ {
+int Pvalue = 0;
+for (int k = 0; k < N; k++)
+ {
+Pvalue += A[Row*N+k] * B[k*N+Col];
+}
+C[Row*N+Col] = Pvalue;
+}
+}
+int main()
+{
+int N = 16;
+int size = N * N * sizeof(int);
+int* A, * B, * C;
+int* dev_A, * dev_B, * dev_C;
+cudaMallocHost(&A, size);
+cudaMallocHost(&B, size);
+cudaMallocHost(&C, size);
+cudaMalloc(&dev_A, size);
+cudaMalloc(&dev_B, size);
+cudaMalloc(&dev_C, size);
+// Initialize matrices A and B
+for (int i = 0; i < N; i++)
+ {
+for (int j = 0; j < N; j++)
+ {
+A[i*N+j] = 2;
+B[i*N+j] = 2;
+}
+}
+cudaMemcpy(dev_A, A, size,cudaMemcpyHostToDevice);
+cudaMemcpy(dev_B, B, size,cudaMemcpyHostToDevice);
+dim3 dimBlock(4, 4);
+dim3 dimGrid(N/dimBlock.x, N/dimBlock.y);
+matmul<<<dimGrid, dimBlock>>>(dev_A, dev_B,dev_C, N);
+cudaMemcpy(C,dev_C,size,cudaMemcpyHostToDevice); // Print the result
+for (int i = 0; i < N; i++)
+ {
+for (int j = 0; j < N; j++)
+{
+std::cout << C[i*N+j] << " ";
+}
+std::cout << std::endl;
+}
+// Free memory
+cudaFree(dev_A);
+cudaFree(dev_B);
+cudaFree(dev_C);
+cudaFreeHost(A);
+cudaFreeHost(B);
+cudaFreeHost(C);
+return 0;
+}
+
+
+add
+
+
+%%writefile Addv2.cu
+
+
+#include <stdio.h>
+
+
+#define N 8
+#define numThread 2 // 2 threads in a block
+#define numBlock 4  // 4 blocks
+
+
+__global__ void add( int *a, int *b, int *c ) {
+
+    int tid = blockDim.x * blockIdx.x + threadIdx.x;
+
+
+    while (tid < N) {
+        c[tid] = a[tid] + b[tid];
+        tid += blockDim.x;
+
+    }
+}
+
+
+int main( void ) {
+    int *a, *b, *c;
+    int *dev_a, *dev_b, *dev_c;
+
+
+    a = (int*)malloc( N * sizeof(int) );
+    b = (int*)malloc( N * sizeof(int) );
+    c = (int*)malloc( N * sizeof(int) );
+
+    for (int i=0; i<N; i++) {
+        a[i] = 2*i;
+        b[i] = i*3;
+    }
+
+
+     cudaMalloc( (void**)&dev_a, N * sizeof(int) );
+     cudaMalloc( (void**)&dev_b, N * sizeof(int) );
+     cudaMalloc( (void**)&dev_c, N * sizeof(int) );
+
+
+     cudaMemcpy( dev_a, a, N * sizeof(int), cudaMemcpyHostToDevice );
+     cudaMemcpy( dev_b, b, N * sizeof(int), cudaMemcpyHostToDevice );
+
+    add<<<numBlock,numThread>>>( dev_a, dev_b, dev_c );
+
+    cudaMemcpy( c, dev_c, N * sizeof(int),cudaMemcpyDeviceToHost );
+
+
+    bool success = true;
+    int total=0;
+    printf("Checking %d values in the array.\n", N);
+    for (int i=0; i<N; i++) {
+        if ((a[i] + b[i]) != c[i]) {
+            printf( "Error:  %d + %d != %d\n", a[i], b[i], c[i] );
+            success = false;
+        }
+        total += 1;
+    }
+    if (success)  printf( "We did it, %d values correct!\n", total );
+
+ for (int i=0; i<N; i++)
+       {
+            printf( "  %d + %d , =%d\n", a[i], b[i], c[i] );
+
+    }
+    free( a );
+    free( b );
+    free( c );
+
+     cudaFree( dev_a );
+     cudaFree( dev_b );
+     cudaFree( dev_c );
+
+    return 0;
+}
